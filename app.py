@@ -3,211 +3,190 @@ import sqlite3
 import pandas as pd
 from datetime import date
 
-st.title("Patient Health Risk Assessment System")
-st.caption("Health Prediction Application using Python and SQLite")
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
+st.set_page_config(
+    page_title="Health Risk System",
+    page_icon="🩺",
+    layout="wide"
+)
 
 # -----------------------------
-# Patient Entry Form
+# CUSTOM CSS (MAKE UI BEAUTIFUL)
 # -----------------------------
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f6f9fc;
+    }
+    .title {
+        font-size: 36px;
+        font-weight: bold;
+        color: #1f4e79;
+    }
+    .subtitle {
+        font-size: 16px;
+        color: gray;
+    }
+    .card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-name = st.text_input("Full Name")
-from datetime import date
+# -----------------------------
+# HEADER
+# -----------------------------
+st.markdown('<div class="title">🩺 Patient Health Risk Assessment System</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">AI-powered health prediction using Python + SQLite</div>', unsafe_allow_html=True)
 
-dob = st.date_input(
-    "Date of Birth",
-    value=date(2004, 1, 1),
-    min_value=date(1950, 1, 1),
-    max_value=date.today()
+st.divider()
+
+# -----------------------------
+# SIDEBAR NAVIGATION
+# -----------------------------
+menu = st.sidebar.selectbox(
+    "Navigation",
+    ["➕ Add Patient", "📊 View Records", "🗑️ Delete Record", "✏️ Update Record"]
 )
-email = st.text_input("Email Address")
-glucose = st.number_input(
-    "Glucose",
-    min_value=0,
-    max_value=500,
-    step=1
-)
 
-haemoglobin = st.number_input(
-    "Haemoglobin",
-    min_value=0,
-    max_value=30,
-    step=1
-)
+# -----------------------------
+# DATABASE CONNECTION
+# -----------------------------
+def get_connection():
+    return sqlite3.connect("patients.db")
 
-cholesterol = st.number_input(
-    "Cholesterol",
-    min_value=0,
-    max_value=500,
-    step=1
-)
-if st.button("Submit"):
+# -----------------------------
+# ADD PATIENT
+# -----------------------------
+if menu == "➕ Add Patient":
 
-    # Validation
-    if "@" not in email or "." not in email:
-        st.error("Please enter a valid email address")
+    st.subheader("Add New Patient")
 
-    elif dob > date.today():
-        st.error("Date of Birth cannot be in the future")
+    col1, col2 = st.columns(2)
 
-    else:
+    with col1:
+        name = st.text_input("Full Name")
+        email = st.text_input("Email Address")
+        dob = st.date_input("Date of Birth", value=date(2004, 1, 1))
 
-        # Prediction Logic
-        if glucose > 140 and cholesterol > 200:
-            remarks = "High Diabetes and Cardiovascular Risk"
+    with col2:
+        glucose = st.number_input("Glucose", 0, 500, 0)
+        haemoglobin = st.number_input("Haemoglobin", 0, 30, 0)
+        cholesterol = st.number_input("Cholesterol", 0, 500, 0)
 
-        elif glucose > 140:
-            remarks = "Potential Diabetes Risk"
+    if st.button("Submit Patient"):
 
-        elif cholesterol > 200:
-            remarks = "Potential Heart Disease Risk"
+        if "@" not in email or "." not in email:
+            st.error("Invalid Email Address")
+
+        elif dob > date.today():
+            st.error("Invalid Date of Birth")
 
         else:
-            remarks = "No Significant Risk Detected"
 
-        conn = sqlite3.connect("patients.db")
+            if glucose > 140 and cholesterol > 200:
+                remarks = "High Diabetes & Heart Risk"
+            elif glucose > 140:
+                remarks = "Possible Diabetes Risk"
+            elif cholesterol > 200:
+                remarks = "Possible Heart Risk"
+            else:
+                remarks = "No Significant Risk"
+
+            conn = get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO patients
+                (name, dob, email, glucose, haemoglobin, cholesterol, remarks)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (name, str(dob), email, glucose, haemoglobin, cholesterol, remarks))
+
+            conn.commit()
+            conn.close()
+
+            st.success("Patient Added Successfully ✅")
+            st.info(f"Prediction: {remarks}")
+
+# -----------------------------
+# VIEW RECORDS
+# -----------------------------
+elif menu == "📊 View Records":
+
+    st.subheader("All Patient Records")
+
+    conn = get_connection()
+    df = pd.read_sql_query("SELECT * FROM patients", conn)
+    conn.close()
+
+    st.dataframe(df, use_container_width=True)
+
+    st.metric("Total Patients", len(df))
+
+# -----------------------------
+# DELETE RECORD
+# -----------------------------
+elif menu == "🗑️ Delete Record":
+
+    st.subheader("Delete Patient")
+
+    delete_id = st.number_input("Enter Patient ID", min_value=1, step=1)
+
+    if st.button("Delete Record"):
+        conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-        INSERT INTO patients
-        (name,dob,email,glucose,haemoglobin,cholesterol,remarks)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-        (
-            name,
-            str(dob),
-            email,
-            glucose,
-            haemoglobin,
-            cholesterol,
-            remarks
-        ))
+        cursor.execute("DELETE FROM patients WHERE id=?", (delete_id,))
 
         conn.commit()
         conn.close()
 
-        st.success("Patient Record Saved Successfully")
-        st.write("Prediction Result:", remarks)
+        st.success("Record Deleted Successfully 🗑️")
 
 # -----------------------------
-# Display Records
+# UPDATE RECORD
 # -----------------------------
+elif menu == "✏️ Update Record":
 
-st.header("Patient Records")
+    st.subheader("Update Patient Data")
 
-conn = sqlite3.connect("patients.db")
-cursor = conn.cursor()
+    update_id = st.number_input("Patient ID", min_value=1, step=1)
 
-cursor.execute("SELECT * FROM patients")
+    col1, col2, col3 = st.columns(3)
 
-records = cursor.fetchall()
+    with col1:
+        new_glucose = st.number_input("Glucose", min_value=0)
+    with col2:
+        new_haemoglobin = st.number_input("Haemoglobin", min_value=0)
+    with col3:
+        new_cholesterol = st.number_input("Cholesterol", min_value=0)
 
-conn.close()
+    if st.button("Update"):
 
-df = pd.DataFrame(
-    records,
-    columns=[
-        "Patient ID",
-        "Full Name",
-        "Date of Birth",
-        "Email",
-        "Glucose",
-        "Haemoglobin",
-        "Cholesterol",
-        "Health Remarks"
-    ]
-)
+        if new_glucose > 140 and new_cholesterol > 200:
+            remarks = "High Diabetes & Heart Risk"
+        elif new_glucose > 140:
+            remarks = "Possible Diabetes Risk"
+        elif new_cholesterol > 200:
+            remarks = "Possible Heart Risk"
+        else:
+            remarks = "No Significant Risk"
 
-st.dataframe(df, use_container_width=True)
+        conn = get_connection()
+        cursor = conn.cursor()
 
-# -----------------------------
-# Delete Record
-# -----------------------------
+        cursor.execute("""
+            UPDATE patients
+            SET glucose=?, haemoglobin=?, cholesterol=?, remarks=?
+            WHERE id=?
+        """, (new_glucose, new_haemoglobin, new_cholesterol, remarks, update_id))
 
-st.header("Delete Patient Record")
+        conn.commit()
+        conn.close()
 
-delete_id = st.number_input(
-    "Enter Patient ID",
-    min_value=1,
-    step=1
-)
-
-if st.button("Delete"):
-
-    conn = sqlite3.connect("patients.db")
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "DELETE FROM patients WHERE id=?",
-        (delete_id,)
-    )
-
-    conn.commit()
-    conn.close()
-
-    st.success("Patient Record Deleted Successfully")
-
-
-    st.header("Update Patient Record")
-
-update_id = st.number_input(
-    "Enter Patient ID to Update",
-    min_value=1,
-    step=1,
-    key="update_id"
-)
-
-new_glucose = st.number_input(
-    "New Glucose Value",
-    min_value=0.0,
-    key="new_glucose"
-)
-
-new_haemoglobin = st.number_input(
-    "New Haemoglobin Value",
-    min_value=0.0,
-    key="new_haemoglobin"
-)
-
-new_cholesterol = st.number_input(
-    "New Cholesterol Value",
-    min_value=0.0,
-    key="new_cholesterol"
-)
-
-if st.button("Update Record"):
-
-    if new_glucose > 140 and new_cholesterol > 200:
-        remarks = "High Diabetes and Cardiovascular Risk"
-
-    elif new_glucose > 140:
-        remarks = "Potential Diabetes Risk"
-
-    elif new_cholesterol > 200:
-        remarks = "Potential Heart Disease Risk"
-
-    else:
-        remarks = "No Significant Risk Detected"
-
-    conn = sqlite3.connect("patients.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    UPDATE patients
-    SET glucose=?,
-        haemoglobin=?,
-        cholesterol=?,
-        remarks=?
-    WHERE id=?
-    """,
-    (
-        new_glucose,
-        new_haemoglobin,
-        new_cholesterol,
-        remarks,
-        update_id
-    ))
-
-    conn.commit()
-    conn.close()
-
-    st.success("Patient Record Updated Successfully")
+        st.success("Record Updated Successfully ✏️")
